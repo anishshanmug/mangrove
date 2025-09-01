@@ -14,14 +14,35 @@ export const TaskDetailsSidebar: React.FC<TaskDetailsSidebarProps> = ({
   onClose,
 }) => {
   const [description, setDescription] = useState('');
+  const [title, setTitle] = useState('');
 
   useEffect(() => {
     if (task) {
       setDescription(task.description || '');
+      setTitle(task.title || '');
     }
   }, [task]);
 
   if (!task) return null;
+
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTitle(e.target.value);
+  };
+
+  const handleTitleBlur = () => {
+    if (title !== task.title) {
+      onUpdateTask(task.id, { title });
+    }
+  };
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (title !== task.title) {
+        onUpdateTask(task.id, { title });
+      }
+    }
+  };
 
   const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setDescription(e.target.value);
@@ -33,7 +54,7 @@ export const TaskDetailsSidebar: React.FC<TaskDetailsSidebarProps> = ({
     }
   };
 
-  const handleDescriptionKeyDown = (e: React.KeyEvent<HTMLTextAreaElement>) => {
+  const handleDescriptionKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && e.ctrlKey) {
       e.preventDefault();
       if (description !== task.description) {
@@ -109,18 +130,26 @@ export const TaskDetailsSidebar: React.FC<TaskDetailsSidebarProps> = ({
           }}>
             Title
           </label>
-          <div style={{
-            padding: '12px',
-            backgroundColor: 'var(--bg-tertiary)',
-            border: '1px solid var(--border-primary)',
-            borderRadius: '6px',
-            color: 'var(--text-primary)',
-            fontSize: '0.9rem',
-            width: 'calc(100% - 40px)',
-            maxWidth: '280px',
-          }}>
-            {task.title}
-          </div>
+          <input
+            type="text"
+            value={title}
+            onChange={handleTitleChange}
+            onBlur={handleTitleBlur}
+            onKeyDown={handleTitleKeyDown}
+            placeholder="Enter task title..."
+            style={{
+              padding: '12px',
+              backgroundColor: 'var(--bg-tertiary)',
+              border: '1px solid var(--border-primary)',
+              borderRadius: '6px',
+              color: 'var(--text-primary)',
+              fontSize: '0.9rem',
+              width: 'calc(100% - 40px)',
+              maxWidth: '280px',
+              fontFamily: 'inherit',
+              outline: 'none',
+            }}
+          />
         </div>
 
         {/* Status */}

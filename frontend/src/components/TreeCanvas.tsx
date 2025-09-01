@@ -43,6 +43,7 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: 1200, height: 800 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<Position>({ x: 0, y: 0 });
+  const [backgroundClickStart, setBackgroundClickStart] = useState<Position | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   // Calculate initial node positions using a tree layout algorithm
   const calculateNodePositions = useCallback((node: TaskNode): Map<string, Position> => {
@@ -187,17 +188,33 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
     }
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e: React.MouseEvent) => {
+    // Check if this was a background click (minimal movement) vs a drag
+    if (backgroundClickStart && isPanning && !draggedNode) {
+      const deltaX = Math.abs(e.clientX - backgroundClickStart.x);
+      const deltaY = Math.abs(e.clientY - backgroundClickStart.y);
+      const totalMovement = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      
+      // If movement was minimal (less than 5 pixels), treat it as a click
+      if (totalMovement < 5) {
+        onNodeSelect(null); // Deselect any selected node
+      }
+    }
+    
     setDraggedNode(null);
     setIsPanning(false);
+    setBackgroundClickStart(null);
   };
 
-  // Handle canvas panning
+  // Handle canvas panning and background clicks
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0 || draggedNode) return;
     
+    // Track the start position for both panning and background click detection
+    const startPos = { x: e.clientX, y: e.clientY };
     setIsPanning(true);
-    setPanStart({ x: e.clientX, y: e.clientY });
+    setPanStart(startPos);
+    setBackgroundClickStart(startPos);
   };
 
   // Handle wheel events for zooming
@@ -323,7 +340,11 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
         onMouseDown={handleCanvasMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        onMouseLeave={() => {
+          setDraggedNode(null);
+          setIsPanning(false);
+          setBackgroundClickStart(null);
+        }}
         onWheel={handleWheel}
       >
         {/* Connection lines */}
