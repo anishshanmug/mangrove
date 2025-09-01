@@ -1,7 +1,37 @@
 {
   "id": "task_1756752434473_o3klhi6oi",
-  "title": "My Tasks",
+  "title": "learn inference",
   "description": "Root task for organizing all tasks",
   "status": "pending",
-  "children": []
+  "children": [
+    {
+      "id": "task_1756762170051_f89ycqzm4",
+      "title": "lectures",
+      "description": "",
+      "status": "pending",
+      "children": [
+        {
+          "id": "task_1756763223203_r1vsq85ae",
+          "title": "mark moyou talk",
+          "description": "",
+          "status": "pending",
+          "children": []
+        },
+        {
+          "id": "task_1756763231049_1culba2jp",
+          "title": "hugging face dude talk",
+          "description": "",
+          "status": "pending",
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "task_1756762171190_d8ecn1dzi",
+      "title": "build",
+      "description": "",
+      "status": "pending",
+      "children": []
+    }
+  ]
 }

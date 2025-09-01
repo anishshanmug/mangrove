@@ -1,6 +1,6 @@
 // API utilities for communicating with the backend
 
-import type { TaskNode, TaskNodeCreate, TaskNodeUpdate, TaskTreeResponse, ApiResponse } from './types';
+import type { TaskNode, TaskNodeCreate, TaskNodeUpdate, TaskTreeResponse, TreeInfo, ApiResponse } from './types';
 
 const API_BASE = '/api';
 
@@ -82,5 +82,22 @@ export const taskApi = {
   async getTreeStats(treeId?: string): Promise<ApiResponse<{ total_tasks: number; completed_tasks: number; progress: number }>> {
     const queryParams = treeId ? `?tree_id=${treeId}` : '';
     return apiCall(`/tasks/stats${queryParams}`);
+  },
+
+  // List all available trees
+  async listTrees(): Promise<ApiResponse<TreeInfo>> {
+    return apiCall<TreeInfo>('/trees');
+  },
+
+  // Get a specific tree by ID
+  async getTree(treeId: string): Promise<ApiResponse<TaskTreeResponse>> {
+    return apiCall<TaskTreeResponse>(`/tasks/trees/${treeId}`);
+  },
+
+  // Delete a tree
+  async deleteTree(treeId: string): Promise<ApiResponse<{ message: string }>> {
+    return apiCall(`/trees/${treeId}`, {
+      method: 'DELETE',
+    });
   },
 };

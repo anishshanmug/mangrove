@@ -41,3 +41,9 @@ export interface ApiResponse<T> {
   data?: T;
   error?: string;
 }
+
+export interface TreeInfo {
+  trees: string[];
+  current_tree: string | null;
+  count: number;
+}

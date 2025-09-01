@@ -1,13 +1,58 @@
-from fastapi import FastAPI
+import logging
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import router as task_router
 from app.services import task_service
 from app.models.sample_tree import create_sample_tree
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handle application startup and shutdown."""
+    # Startup
+    logger.info("Starting Mangrove API...")
+    
+    # Initialize the task service with persisted trees
+    await task_service.initialize()
+    
+    # Load default tree if no trees exist
+    if not task_service.list_trees():
+        logger.info("No existing trees found, checking for default.json...")
+        try:
+            from app.persistence import tree_persistence
+            default_tree = await tree_persistence.load_tree("default")
+            if default_tree:
+                task_service.trees["default"] = default_tree
+                task_service.current_tree_id = "default"
+                logger.info("Loaded default tree from default.json")
+        except Exception as e:
+            logger.warning(f"Could not load default tree: {e}")
+    
+    logger.info(f"Service initialized with {len(task_service.list_trees())} trees")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down Mangrove API...")
+    try:
+        await task_service.force_save_all()
+        logger.info("All trees saved to disk")
+    except Exception as e:
+        logger.error(f"Error saving trees during shutdown: {e}")
+
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Mangrove API", description="Task tree management API")
+    app = FastAPI(
+        title="Mangrove API", 
+        description="Task tree management API",
+        lifespan=lifespan
+    )
 
     app.add_middleware(
         CORSMiddleware,
@@ -67,10 +112,59 @@ def create_app() -> FastAPI:
                 task_service.create_task(grandchild_data, child.id, tree_id)
         
         return {"message": "Sample tree created", "tree_id": tree_id}
+    
+    @app.get("/api/trees")
+    async def list_trees() -> dict:
+        """List all available trees."""
+        trees = task_service.list_trees()
+        return {
+            "trees": trees,
+            "current_tree": task_service.current_tree_id,
+            "count": len(trees)
+        }
+    
+    @app.delete("/api/trees/{tree_id}")
+    async def delete_tree(tree_id: str) -> dict:
+        """Delete a tree."""
+        success = await task_service.delete_tree(tree_id)
+        if not success:
+            raise HTTPException(status_code=404, detail=f"Tree {tree_id} not found")
+        return {"message": f"Tree {tree_id} deleted"}
+    
+    @app.post("/api/save-all")
+    async def save_all_trees() -> dict:
+        """Manually save all trees to disk."""
+        try:
+            await task_service.force_save_all()
+            return {"message": "All trees saved successfully"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to save trees: {str(e)}")
+    
+    @app.post("/api/cleanup-backups")
+    async def cleanup_backups(
+        tree_id: str = None,
+        keep_count: int = 10,
+        older_than_days: int = 7
+    ) -> dict:
+        """Clean up old backup files."""
+        try:
+            from app.persistence import tree_persistence
+            deleted_count = await tree_persistence.cleanup_old_backups(
+                tree_id=tree_id,
+                keep_count=keep_count,
+                older_than_days=older_than_days
+            )
+            return {
+                "message": f"Cleaned up {deleted_count} backup files",
+                "deleted_count": deleted_count,
+                "tree_id": tree_id or "all trees",
+                "keep_count": keep_count,
+                "older_than_days": older_than_days
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to cleanup backups: {str(e)}")
 
     return app
 
 
 app = create_app()
-
-

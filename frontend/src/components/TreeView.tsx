@@ -4,6 +4,7 @@ import { TaskStatus } from '../types';
 import { taskApi } from '../api';
 import { TreeCanvas } from './TreeCanvas';
 import { TaskDetailsSidebar } from './TaskDetailsSidebar';
+import { TreeSelector } from './TreeSelector';
 
 interface TreeViewProps {
   className?: string;
@@ -14,22 +15,60 @@ export const TreeView: React.FC<TreeViewProps> = ({ className = '' }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  
+  // Tree management state
+  const [currentTreeId, setCurrentTreeId] = useState<string | null>(null);
+  const [availableTrees, setAvailableTrees] = useState<string[]>([]);
+  const [treesLoading, setTreesLoading] = useState(false);
 
 
-  // Load the tree on component mount
+  // Load available trees and current tree on component mount
   useEffect(() => {
-    loadTree();
+    loadAvailableTrees();
   }, []);
+  
+  // Load tree when currentTreeId changes
+  useEffect(() => {
+    if (currentTreeId) {
+      loadTree(currentTreeId);
+    }
+  }, [currentTreeId]);
 
-  const loadTree = async () => {
+  const loadAvailableTrees = async () => {
+    setTreesLoading(true);
+    setError(null);
+    
+    const response = await taskApi.listTrees();
+    
+    if (response.error) {
+      setError(response.error);
+    } else if (response.data) {
+      setAvailableTrees(response.data.trees);
+      
+      // Set current tree - prefer the backend's current tree, fallback to first available, or 'default'
+      if (response.data.current_tree) {
+        setCurrentTreeId(response.data.current_tree);
+      } else if (response.data.trees.length > 0) {
+        setCurrentTreeId(response.data.trees[0]);
+      } else {
+        // No trees available - try to load default anyway
+        setCurrentTreeId('default');
+      }
+    }
+    
+    setTreesLoading(false);
+  };
+  
+  const loadTree = async (treeId: string) => {
     setLoading(true);
     setError(null);
     
-    const response = await taskApi.getCurrentTree();
+    // Try to get the specific tree first
+    const response = await taskApi.getTree(treeId);
     
     if (response.error) {
       if (response.error.includes('Tree not found') || response.error.includes('404')) {
-        // No tree exists yet - this is expected for a fresh app
+        // Tree doesn't exist - this is expected for new trees
         setTree(null);
       } else {
         setError(response.error);
@@ -107,13 +146,13 @@ export const TreeView: React.FC<TreeViewProps> = ({ className = '' }) => {
       setTree(updatedTree);
     }
 
-    // API call with tree ID
-    const response = await taskApi.updateTask(nodeId, updates, 'default');
+    // API call with current tree ID
+    const response = await taskApi.updateTask(nodeId, updates, currentTreeId || undefined);
     
     if (response.error) {
       // Revert on error
       setError(`Failed to update task: ${response.error}`);
-      loadTree(); // Reload from server
+      if (currentTreeId) loadTree(currentTreeId); // Reload from server
     } else {
       // Clear any previous errors
       setError(null);
@@ -145,13 +184,13 @@ export const TreeView: React.FC<TreeViewProps> = ({ className = '' }) => {
       setTree(updatedTree);
     }
 
-    // API call with tree ID
-    const response = await taskApi.createTask(newNodeData, parentId, 'default');
+    // API call with current tree ID
+    const response = await taskApi.createTask(newNodeData, parentId, currentTreeId || undefined);
     
     if (response.error) {
       // Revert on error
       setError(`Failed to create task: ${response.error}`);
-      loadTree(); // Reload from server
+      if (currentTreeId) loadTree(currentTreeId); // Reload from server
     } else {
       // Clear any previous errors
       setError(null);
@@ -175,13 +214,13 @@ export const TreeView: React.FC<TreeViewProps> = ({ className = '' }) => {
       setTree(updatedTree);
     }
 
-    // API call with tree ID
-    const response = await taskApi.deleteTask(nodeId, 'default');
+    // API call with current tree ID
+    const response = await taskApi.deleteTask(nodeId, currentTreeId || undefined);
     
     if (response.error) {
       // Revert on error
       setError(`Failed to delete task: ${response.error}`);
-      loadTree(); // Reload from server
+      if (currentTreeId) loadTree(currentTreeId); // Reload from server
     } else {
       // Clear any previous errors
       setError(null);
@@ -212,7 +251,8 @@ export const TreeView: React.FC<TreeViewProps> = ({ className = '' }) => {
     return findTaskRecursive(tree);
   };
 
-  const handleCreateRootTask = async () => {
+  const handleCreateRootTask = async (treeId?: string) => {
+    const targetTreeId = treeId || currentTreeId || 'default';
     const newNodeId = generateNodeId();
     const newNodeData: TaskNodeCreate = {
       id: newNodeId,
@@ -223,23 +263,72 @@ export const TreeView: React.FC<TreeViewProps> = ({ className = '' }) => {
 
     setLoading(true);
     // Try to create a tree first
-    const treeResponse = await taskApi.createTree('default', newNodeData);
+    const treeResponse = await taskApi.createTree(targetTreeId, newNodeData);
     
     if (treeResponse.error) {
       // If tree creation fails, try creating just a task
-      const taskResponse = await taskApi.createTask(newNodeData, undefined, 'default');
+      const taskResponse = await taskApi.createTask(newNodeData, undefined, targetTreeId);
       
       if (taskResponse.error) {
         setError(`Failed to create root task: ${taskResponse.error}`);
       } else {
         setError(null);
-        loadTree(); // Reload to get the new tree
+        // Update current tree and reload
+        setCurrentTreeId(targetTreeId);
+        await loadAvailableTrees();
       }
     } else {
       setError(null);
-      loadTree(); // Reload to get the new tree
+      // Update current tree and reload
+      setCurrentTreeId(targetTreeId);
+      await loadAvailableTrees();
     }
     setLoading(false);
+  };
+  
+  const handleTreeChange = async (newTreeId: string) => {
+    setCurrentTreeId(newTreeId);
+  };
+  
+  const handleCreateNewTree = async () => {
+    const treeName = prompt('Enter a name for the new tree:');
+    if (!treeName) return;
+    
+    const treeId = treeName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    await handleCreateRootTask(treeId);
+  };
+  
+  const handleDeleteTree = async (treeIdToDelete: string) => {
+    try {
+      setTreesLoading(true);
+      
+      const response = await taskApi.deleteTree(treeIdToDelete);
+      
+      if (response.error) {
+        setError(`Failed to delete tree: ${response.error}`);
+      } else {
+        // Remove from available trees
+        setAvailableTrees(prev => prev.filter(id => id !== treeIdToDelete));
+        
+        // If we deleted the current tree, switch to another one
+        if (currentTreeId === treeIdToDelete) {
+          const remainingTrees = availableTrees.filter(id => id !== treeIdToDelete);
+          if (remainingTrees.length > 0) {
+            setCurrentTreeId(remainingTrees[0]);
+          } else {
+            // No trees left
+            setCurrentTreeId(null);
+            setTree(null);
+          }
+        }
+        
+        setError(null);
+      }
+    } catch (err) {
+      setError(`Failed to delete tree: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setTreesLoading(false);
+    }
   };
 
   if (loading) {
@@ -257,7 +346,7 @@ export const TreeView: React.FC<TreeViewProps> = ({ className = '' }) => {
       <div className={`tree-container ${className}`}>
         <div style={{ textAlign: 'center', padding: '2rem' }}>
           <p style={{ color: 'var(--error)' }}>Error: {error}</p>
-          <button onClick={() => loadTree()}>Retry</button>
+          <button onClick={() => currentTreeId && loadTree(currentTreeId)}>Retry</button>
         </div>
       </div>
     );
@@ -272,7 +361,7 @@ export const TreeView: React.FC<TreeViewProps> = ({ className = '' }) => {
             Create your first task to get started
           </p>
           <button 
-            onClick={handleCreateRootTask}
+            onClick={() => handleCreateRootTask(undefined)}
             style={{
               backgroundColor: 'var(--accent-primary)',
               color: 'white',
@@ -296,22 +385,22 @@ export const TreeView: React.FC<TreeViewProps> = ({ className = '' }) => {
 
   return (
     <div className={`tree-container ${className}`} style={{ width: '100%', height: '100%', position: 'relative' }}>
-      {/* Floating App Title */}
+      {/* Tree Selector */}
       <div style={{
         position: 'absolute',
         top: '20px',
         left: '20px',
         zIndex: 10,
-        background: 'rgba(45, 45, 45, 0.9)',
-        backdropFilter: 'blur(10px)',
-        border: '1px solid var(--border-primary)',
-        borderRadius: '12px',
-        padding: '12px 16px',
-        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
       }}>
-        <h2 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-primary)' }}>
-          Mangrove
-        </h2>
+        <TreeSelector
+          currentTreeId={currentTreeId}
+          availableTrees={availableTrees}
+          currentTreeName={tree?.title}
+          onTreeChange={handleTreeChange}
+          onCreateNewTree={handleCreateNewTree}
+          onDeleteTree={handleDeleteTree}
+          loading={treesLoading}
+        />
       </div>
 
       {/* Tree Canvas */}
