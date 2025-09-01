@@ -48,10 +48,9 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
   const calculateNodePositions = useCallback((node: TaskNode): Map<string, Position> => {
     const positions = new Map<string, Position>();
     
-    // First pass: calculate tree dimensions and assign x positions
-
+    // First pass: calculate tree dimensions and assign relative positions
     const layoutNode = (node: TaskNode, level: number, xOffset: number): number => {
-      const y = level * LEVEL_HEIGHT + 100;
+      const y = level * LEVEL_HEIGHT;
       
       if (node.children.length === 0) {
         // Leaf node
@@ -78,9 +77,26 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
       }
     };
 
-    layoutNode(node, 0, 0);
-    return positions;
-  }, []);
+    // Calculate tree dimensions
+    const treeWidth = layoutNode(node, 0, 0);
+    
+    // Center the tree in the viewBox
+    const centerX = viewBox.width / 2;
+    const centerY = viewBox.height / 2;
+    const offsetX = centerX - treeWidth / 2;
+    const offsetY = centerY - 100; // Offset to account for top padding
+    
+    // Apply centering offset to all positions
+    const centeredPositions = new Map<string, Position>();
+    for (const [nodeId, pos] of positions) {
+      centeredPositions.set(nodeId, {
+        x: pos.x + offsetX,
+        y: pos.y + offsetY
+      });
+    }
+    
+    return centeredPositions;
+  }, [viewBox]);
 
   // Initialize positions when tree changes
   useEffect(() => {

@@ -3,6 +3,7 @@ import type { TaskNode, TaskNodeCreate } from '../types';
 import { TaskStatus } from '../types';
 import { taskApi } from '../api';
 import { TreeCanvas } from './TreeCanvas';
+import { TaskDetailsSidebar } from './TaskDetailsSidebar';
 
 interface TreeViewProps {
   className?: string;
@@ -192,6 +193,25 @@ export const TreeView: React.FC<TreeViewProps> = ({ className = '' }) => {
     setSelectedNodeId(nodeId);
   };
 
+  const getSelectedTask = (): TaskNode | null => {
+    if (!selectedNodeId || !tree) return null;
+
+    const findTaskRecursive = (node: TaskNode): TaskNode | null => {
+      if (node.id === selectedNodeId) {
+        return node;
+      }
+      
+      for (const child of node.children) {
+        const found = findTaskRecursive(child);
+        if (found) return found;
+      }
+      
+      return null;
+    };
+
+    return findTaskRecursive(tree);
+  };
+
   const handleCreateRootTask = async () => {
     const newNodeId = generateNodeId();
     const newNodeData: TaskNodeCreate = {
@@ -296,8 +316,9 @@ export const TreeView: React.FC<TreeViewProps> = ({ className = '' }) => {
 
       {/* Tree Canvas */}
       <div style={{ 
-        width: '100%',
-        height: '100%'
+        width: selectedNodeId ? 'calc(100% - 400px)' : '100%',
+        height: '100%',
+        transition: 'width 0.3s ease'
       }}>
         <TreeCanvas
           tree={tree}
@@ -308,6 +329,13 @@ export const TreeView: React.FC<TreeViewProps> = ({ className = '' }) => {
           selectedNodeId={selectedNodeId}
         />
       </div>
+
+      {/* Task Details Sidebar */}
+      <TaskDetailsSidebar
+        task={getSelectedTask()}
+        onUpdateTask={handleUpdateNode}
+        onClose={() => setSelectedNodeId(null)}
+      />
     </div>
   );
 };
